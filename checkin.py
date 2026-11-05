@@ -1148,9 +1148,28 @@ class TelegramBackend(PushBackend):
         self.bot_token = bot_token
         self.chat_id = chat_id
 
-    def send(self, title: str, payload: dict) -> bool:
+    def send(self, payload, *args) -> bool:
         url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
-        text = f"{title}\n\n{self._render(payload)}"
+        if args:
+            title, data = str(payload), args[0]
+        else:
+            data = payload
+            title = data.get("title", "") if isinstance(data, dict) else getattr(data, "title", "")
+
+        if hasattr(self, "_render"):
+            body = self._render(data)
+        elif isinstance(data, dict):
+            body = data.get("desp") or data.get("body") or data.get("text") or "\n".join(data.get("lines", []))
+        else:
+            body = getattr(data, "desp", None) or getattr(data, "body", None) or getattr(data, "text", None)
+            if callable(body):
+                body = body()
+            if not body and hasattr(data, "lines"):
+                body = "\n".join(str(x) for x in data.lines)
+            if not body:
+                body = str(data)
+
+        text = f"{title}\n\n{body}" if (title and title not in str(body)) else str(body)
         try:
             resp = requests.post(
                 url,
